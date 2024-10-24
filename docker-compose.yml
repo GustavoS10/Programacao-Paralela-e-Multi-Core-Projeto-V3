@@ -1,0 +1,39 @@
+version: '3.8'
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+
+  servidor:
+    build: ./servidor
+    ports:
+      - "8080:8080"
+    depends_on:
+      - rabbitmq
+    restart: always
+
+  api:
+    build: ./api
+    ports:
+      - "5000:5000"
+    depends_on:
+      - rabbitmq
+    restart: always
+
+  despachante:
+    build: ./despachante
+    depends_on:
+      - rabbitmq
+    restart: always
+
+  cliente:
+    build: ./cliente
+    depends_on:
+      - api
+      - rabbitmq
+    restart: on-failure
+
+    
