@@ -1,44 +1,44 @@
-version: '3.8'
-services:
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 10s
+  version: '3.8'
+  services:
+    rabbitmq:
+      image: rabbitmq:3-management
+      ports:
+        - "5672:5672"
+        - "15672:15672"
+      healthcheck:
+        test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
+        start_period: 10s
 
-  servidor:
-    build: ./servidor
-    ports:
-      - "8080:8080"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
+    servidor:
+      build: ./servidor
+      ports:
+        - "8080:8080"
+      depends_on:
+        rabbitmq:
+          condition: service_healthy
 
-  api:
-    build: ./api
-    ports:
-      - "5000:5000"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
+    api:
+      build: ./api
+      ports:
+        - "5000:5000"
+      depends_on:
+        rabbitmq:
+          condition: service_healthy
 
-  despachante:
-    build: ./despachante
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
+    despachante:
+      build: ./despachante
+      depends_on:
+        rabbitmq:
+          condition: service_healthy
 
-  cliente:
-    build: ./cliente
-    depends_on:
-      api:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
-    restart: on-failure
+    cliente:
+      build: ./cliente
+      depends_on:
+        api:
+          condition: service_started
+        rabbitmq:
+          condition: service_healthy
+      restart: on-failure
