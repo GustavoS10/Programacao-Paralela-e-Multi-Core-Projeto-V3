@@ -9,10 +9,11 @@ def send_request(num_requests):
             response = requests.post(
                 'http://api:5000/compra', json={"usuario_id": i, "evento_id": 100, "ingresso_id": i})
             print(
-                f"[Cliente] Requisição de compra enviada para Ingresso ID: {i}, Usuário ID: {i}")
-            print("Resposta da API:", response.status_code, response.json())
+                f"[Cliente] Requisição de compra enviada para Ingresso ID: {i}, Usuário ID: {i}", flush=True)
+            print("Resposta da API:", response.status_code,
+                  response.json(), flush=True)
         except requests.exceptions.ConnectionError:
-            print("[Cliente] Aguardando API...")
+            print("[Cliente] Aguardando API...", flush=True)
             time.sleep(5)
 
 
@@ -26,24 +27,39 @@ def check_status(num_requests):
 
             try:
                 response = requests.get(f'http://api:5000/resultado/{i}')
+
+                # Adiciona um controle para verificar se a resposta é válida
+                if response.status_code != 200:
+                    print(
+                        f"[Cliente] Erro na resposta da API para Ingresso ID: {i}. Status Code: {response.status_code}", flush=True)
+                    continue
+
                 data = response.json()
                 print(
-                    f"[Cliente] Consulta de status para Ingresso ID: {i}, Usuário ID: {i}")
-                print("Resposta da API:", response.status_code, data)
+                    f"[Cliente] Consulta de status para Ingresso ID: {i}, Usuário ID: {i}", flush=True)
+                print("Resposta da API:", response.status_code, data, flush=True)
 
                 # Verifica se o status do ingresso está finalizado
-                if data.get("status") in ["vendido", "esgotado"]:
-                    # Adiciona ao conjunto de ingressos completados
+                if data.get("status") == "vendido":
                     completed.add(i)
                     print(
-                        f"[Cliente] Ingresso ID {i} processado com status final: {data.get('status')}")
+                        f"[Cliente] Ingresso ID {i} processado com status final: Vendido", flush=True)
+
+                elif data.get("status") == "esgotado":
+                    completed.add(i)
+                    print(
+                        f"[Cliente] Ingresso ID {i} não pode ser processado: Ingressos Esgotados", flush=True)
 
             except requests.exceptions.ConnectionError:
-                print("[Cliente] Aguardando API...")
+                print("[Cliente] Aguardando API...", flush=True)
                 time.sleep(5)
+            except ValueError:
+                print(
+                    f"[Cliente] Erro ao decodificar a resposta da API para Ingresso ID: {i}.", flush=True)
+                continue
 
         # Pausa antes da próxima consulta para evitar excesso de chamadas
-        time.sleep(10)
+        time.sleep(1)
 
 
 if __name__ == "__main__":
@@ -51,4 +67,4 @@ if __name__ == "__main__":
     send_request(num_requests)  # Envia as requisições de compra apenas uma vez
     # Consulta o status até que todos estejam finalizados
     check_status(num_requests)
-    print("[Cliente] Todas as requisições foram processadas.")
+    print("[Cliente] Todas as requisições foram processadas.", flush=True)

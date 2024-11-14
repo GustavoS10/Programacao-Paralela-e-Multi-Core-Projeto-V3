@@ -69,7 +69,9 @@ class ServidorIngressos:
         while True:
             with self.contador_lock:
                 # Se todos os ingressos estão reservados, interrompe as reservas e começa a monitorar
-                if self.contador_ingressos_disponiveis == 0 and self.contador_ingressos_reservados > 0:
+                if self.contador_ingressos_disponiveis <= 0:
+                    print(
+                        f"[Servidor - Reserva] FilaReserva{fila_id}: Todos os ingressos estão reservados ou esgotados.", flush=True)
                     self.reservas_paradas = True
                     break
 
@@ -82,22 +84,29 @@ class ServidorIngressos:
 
                 with lock:
                     if ingresso_id not in self.ingressos_reservados:
-                        ingresso = Ingresso(ingresso_id, evento_id)
-                        if ingresso.reservar(usuario_id):
-                            self.ingressos_reservados[ingresso_id] = ingresso
-                            with self.contador_lock:
+                        with self.contador_lock:
+                            # Verificação e decremento atômico
+                            if self.contador_ingressos_disponiveis > 0:
                                 self.contador_ingressos_disponiveis -= 1
                                 self.contador_ingressos_reservados += 1
-                            print(
-                                f"[Servidor - Reserva] FilaReserva{fila_id}: Ingresso {ingresso_id} reservado.", flush=True)
+                                ingresso = Ingresso(ingresso_id, evento_id)
+                                if ingresso.reservar(usuario_id):
+                                    self.ingressos_reservados[ingresso_id] = ingresso
+                                    print(
+                                        f"[Servidor - Reserva] FilaReserva{fila_id}: Ingresso {ingresso_id} reservado.", flush=True)
 
-                            fila_processamento_menos_ocupada = self.obter_fila_processamento_menos_ocupada(
-                                channel)
-                            if fila_processamento_menos_ocupada:
-                                channel.basic_publish(
-                                    exchange='', routing_key=fila_processamento_menos_ocupada, body=body)
+                                    fila_processamento_menos_ocupada = self.obter_fila_processamento_menos_ocupada(
+                                        channel)
+                                    if fila_processamento_menos_ocupada:
+                                        channel.basic_publish(
+                                            exchange='', routing_key=fila_processamento_menos_ocupada, body=body)
+                                        print(
+                                            f"[Servidor - Reserva] FilaReserva{fila_id}: Ingresso {ingresso_id} enviado para {fila_processamento_menos_ocupada}", flush=True)
+                            else:
                                 print(
-                                    f"[Servidor - Reserva] FilaReserva{fila_id}: Ingresso {ingresso_id} enviado para {fila_processamento_menos_ocupada}", flush=True)
+                                    f"[Servidor - Reserva] FilaReserva{fila_id}: Todos os ingressos estão reservados.", flush=True)
+                                self.reservas_paradas = True
+                                break
 
             time.sleep(2)
 
@@ -112,12 +121,6 @@ class ServidorIngressos:
                     self.enviar_mensagem_esgotado(channel)
                     self.mover_requisicoes_pendentes_para_fila_saida(
                         channel, fila_id)
-                    break
-                # Se há ingressos disponíveis novamente, retoma as reservas
-                elif self.contador_ingressos_disponiveis > 0:
-                    self.reservas_paradas = False
-                    print(
-                        f"[Servidor - Reserva] FilaReserva{fila_id}: Reservas retomadas.", flush=True)
                     break
 
             print(
@@ -138,7 +141,7 @@ class ServidorIngressos:
             method_frame, header_frame, body = channel.basic_get(
                 queue=f'FilaReserva{fila_id}', auto_ack=True)
             if not body:
-                break  # Sai do loop quando não houver mais requisições pendentes
+                break
 
             mensagem = {
                 "status": "Esgotado",
