@@ -1,7 +1,7 @@
 import pika
 import time
 
-NUM_FILAS_RESERVA = 2  # Defina o número de filas de reserva
+NUM_FILAS_RESERVA = 2
 
 
 def criar_conexao():
@@ -24,7 +24,6 @@ def despachante():
         method_frame, header_frame, body = channel.basic_get(
             queue='FilaEntrada', auto_ack=True)
         if body:
-            # Verifique o número de mensagens em cada fila de reserva
             fila_menos_ocupada = None
             menor_tamanho = float('inf')
             for i in range(1, NUM_FILAS_RESERVA + 1):
@@ -34,7 +33,6 @@ def despachante():
                     menor_tamanho = queue.method.message_count
                     fila_menos_ocupada = f'FilaReserva{i}'
 
-            # Enviar a mensagem para a fila menos ocupada
             if fila_menos_ocupada:
                 channel.basic_publish(
                     exchange='', routing_key=fila_menos_ocupada, body=body)

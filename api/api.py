@@ -1,26 +1,25 @@
 import pika
+import json
 from flask import Flask, request, jsonify
 import time
 
 app = Flask(__name__)
-
-# Função para conectar ao RabbitMQ
 
 
 def connect_rabbitmq():
     for _ in range(5):
         try:
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters('rabbitmq'))
-            print("Conexão estabelecida com o RabbitMQ.")
+                pika.ConnectionParameters('rabbitmq')
+            )
+            print("[API] Conexão estabelecida com o RabbitMQ.")
             return connection
-        except pika.exceptions.AMQPConnectionError as e:
-            print("Aguardando RabbitMQ ficar disponível...")
+        except pika.exceptions.AMQPConnectionError:
+            print("[API] Aguardando RabbitMQ ficar disponível...")
             time.sleep(5)
-    raise Exception("Não foi possível conectar ao RabbitMQ.")
+    raise Exception("[API] Não foi possível conectar ao RabbitMQ.")
 
 
-# Conexão e canal do RabbitMQ
 connection = connect_rabbitmq()
 channel = connection.channel()
 channel.queue_declare(queue='FilaEntrada', durable=True)
@@ -29,29 +28,58 @@ channel.queue_declare(queue='FilaSaida', durable=True)
 
 @app.route('/compra', methods=['POST'])
 def compra():
+    """Recebe dados de compra e publica na fila de entrada."""
     data = request.get_json()
     usuario_id = data.get('usuario_id')
     ingresso_id = data.get('ingresso_id')
     evento_id = data.get('evento_id')
 
-    # Verifique se todos os campos necessários estão presentes
     if usuario_id is not None and ingresso_id is not None and evento_id is not None:
-        # Formate a mensagem corretamente com os três valores separados por vírgula
-        mensagem = f"{ingresso_id},{evento_id},{usuario_id}"
+        mensagem = json.dumps({
+            "usuario_id": usuario_id,
+            "ingresso_id": ingresso_id,
+            "evento_id": evento_id
+        })
         channel.basic_publish(
-            exchange='', routing_key='FilaEntrada', body=mensagem)
+            exchange='', routing_key='FilaEntrada', body=mensagem
+        )
         print(f"[API] Mensagem enviada para a fila: {mensagem}")
         return jsonify({"status": "Requisição enviada", "mensagem": mensagem})
     else:
+        print("[API] Dados incompletos na requisição.")
         return jsonify({"erro": "Dados incompletos na requisição"}), 400
 
 
 @app.route('/resultado/<int:usuario_id>', methods=['GET'])
 def resultado(usuario_id):
+    """Consulta mensagens na fila de saída para um usuário específico."""
+    print(
+        f"[API] Requisição recebida no endpoint /resultado para usuario_id: {usuario_id}")
     method_frame, header_frame, body = channel.basic_get(
-        queue='FilaSaida', auto_ack=True)
+        queue='FilaSaida', auto_ack=False
+    )
+
     if body:
-        return jsonify({"usuario_id": usuario_id, "id_ingresso": body.decode()})
+        try:
+            print(f"[API] Mensagem recebida da fila: {body.decode()}")
+            mensagem = json.loads(body.decode())
+
+            if mensagem.get("usuario_comprador_id") == usuario_id:
+                channel.basic_ack(delivery_tag=method_frame.delivery_tag)
+                print(
+                    f"[API] Mensagem encontrada para o usuário {usuario_id}: {mensagem}")
+                return jsonify(mensagem)
+            else:
+                channel.basic_nack(
+                    delivery_tag=method_frame.delivery_tag, requeue=True)
+                print(
+                    f"[API] Mensagem não corresponde ao usuário {usuario_id}. Reenviando para a fila.")
+        except json.JSONDecodeError:
+            channel.basic_ack(delivery_tag=method_frame.delivery_tag)
+            print("[API] Mensagem corrompida encontrada na fila. Ignorando.")
+            return jsonify({"erro": "Mensagem corrompida na fila"}), 500
+
+    print(f"[API] Nenhuma mensagem encontrada para o usuário {usuario_id}.")
     return jsonify({"status": "Aguardando processamento"})
 
 
