@@ -3,7 +3,7 @@ import time
 import json
 
 
-def send_request(num_requests):
+def send_request(num_requests, delay=0.1):
     """Função para enviar requisições de compra de ingresso para a API."""
     for i in range(num_requests):
         try:
@@ -19,8 +19,11 @@ def send_request(num_requests):
         except requests.exceptions.ConnectionError:
             print("[Cliente] Aguardando API...", flush=True)
 
+        # Adiciona delay entre requisições
+        time.sleep(delay)
 
-def check_status(num_requests):
+
+def check_status(num_requests, delay=0.5):
     """Função para consultar o status de cada ingresso até que o processamento esteja completo."""
     pending = set(range(num_requests))
     completed = set()
@@ -43,7 +46,7 @@ def check_status(num_requests):
                     continue
 
                 data = response.json()
-
+                print("Data: ", data)
                 if data.get("usuario_comprador_id") == user_id:
                     ingresso_id = data.get("ingresso_id")
                     status = data.get("status")
@@ -74,15 +77,19 @@ def check_status(num_requests):
                     f"[Cliente] Erro ao decodificar a resposta da API para Usuário ID: {user_id}. Erro: {e}", flush=True)
                 continue
 
+        # Adiciona delay entre verificações de status
+        time.sleep(delay)
+
         if pending:
             print(
-                f"[DEBUG] {len(pending)} usuários ainda pendentes. Pausando por 5 segundos...", flush=True)
+                f"[DEBUG] {len(pending)} usuários ainda pendentes", flush=True)
 
     print("[DEBUG] Todos os usuários foram processados.", flush=True)
 
 
 if __name__ == "__main__":
-    num_requests = 150
-    send_request(num_requests)
-    check_status(num_requests)
+    num_requests = 2000
+    send_request(num_requests, delay=0)  # Delay de 200ms entre envios
+    # Delay de 1 segundo entre verificações
+    check_status(num_requests, delay=1)
     print("[Cliente] Todas as requisições foram processadas.", flush=True)
